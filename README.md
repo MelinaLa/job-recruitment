@@ -1,28 +1,44 @@
-﻿# Cloud Recruitment - Task 1
+﻿# Cloud Recruitment
 
-Find the 10 license serial numbers with the most requests using plain PHP.
-No framework, Composer, Node.js, database, or web server is required.
+PHP script for tasks 1 and 2. Requires PHP 8.2 or later with zlib.
 
 ## Usage
 
-Requires PHP 8.2 or later.
-
-1. Put extracted, plain-text log files in `logs/`.
-2. Run from the project folder:
+Extract the log files into `logs/` and run:
 
 ```sh
 php analyze.php
 ```
 
-The top 10 appear in the console and in `results/top-licenses.txt`. Each run replaces the previous result. Missing input and output folders are created automatically.
+This runs both tasks. To run a single task, pass its function name as shown below.
 
-All non-hidden files directly inside `logs/` are analyzed together. Subfolders are ignored. Extract compressed files first. Each line containing a usable `serial=` value counts as one request regardless of HTTP status. Missing or empty serials and `serial=-` are skipped and counted as `Lines without a usable serial`. Ties are sorted by serial number. Duplicate input files count requests twice.
+## Tasks and commands
 
-Log files and results stay local and are excluded from Git. Only task 1 is implemented.
+Task 1 uses `analyzeAccessAttempts()` to find the 10 license serial numbers with the most server access attempts and show the number of attempts for each license.
 
-## Files
+```sh
+php analyze.php analyzeAccessAttempts
+```
 
-- `analyze.php`: complete console analysis
-- `logs/`: private input files
-- `results/`: generated results
-- `.gitignore`: exclusions for local and generated files
+Task 2 uses `analyzeSharedLicenses()` to identify devices by their MAC address and find the 10 licenses used on the most distinct devices. Only licenses observed on more than one device are listed, together with their device count.
+
+```sh
+php analyze.php analyzeSharedLicenses
+```
+
+Show the available commands:
+
+```sh
+php analyze.php --help
+```
+
+## Results
+
+- `results/top-licenses.txt`: top 10 licenses by access attempts.
+- `results/top-shared-licenses.txt`: top 10 licenses by distinct device count.
+
+Results are replaced on each run of the selected task.
+
+Devices are identified by the MAC address in `specs`. Repeated requests from the same device count once per license. Requests without an identifiable device do not contribute to the device count. Multiple devices do not prove simultaneous use.
+
+Keep logs and results private. Both folders are excluded from Git. The hardware bonus is not implemented.

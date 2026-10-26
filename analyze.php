@@ -2,6 +2,24 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/src/functions.php';
+
+$analysis = $argv[1] ?? 'all';
+$usage = 'Usage: php analyze.php [all|analyzeAccessAttempts|analyzeSharedLicenses]' . PHP_EOL;
+if ($argc === 2 && in_array($analysis, ['--help', '-h'], true)) {
+    echo $usage;
+    exit(0);
+}
+if ($argc > 2 || !in_array($analysis, ['all', 'analyzeAccessAttempts', 'analyzeSharedLicenses'], true)) {
+    fwrite(STDERR, $usage);
+    exit(1);
+}
+
+if ($analysis !== 'analyzeAccessAttempts' && !extension_loaded('zlib')) {
+    fwrite(STDERR, 'The PHP zlib extension is required to decode device metadata.' . PHP_EOL);
+    exit(1);
+}
+
 foreach (['logs', 'results'] as $folder) {
     $directory = __DIR__ . '/' . $folder;
     if (!is_dir($directory) && !mkdir($directory, 0777, true)) {
@@ -10,89 +28,36 @@ foreach (['logs', 'results'] as $folder) {
     }
 }
 
-$files = glob(__DIR__ . '/logs/*');
-$counts = [];
-$fileCount = 0;
-$skipped = 0;
-$skippedLines = [];
+$files = array_values(array_filter(
+    glob(__DIR__ . '/logs/*') ?: [],
+    static fn (string $file): bool => is_file($file) && !str_starts_with(basename($file), '.')
+));
 
-foreach ($files === false ? [] : $files as $file) {
-    if (!is_file($file) || str_starts_with(basename($file), '.')) {
-        continue;
-    }
-
-    $handle = @fopen($file, 'r');
-    if ($handle === false) {
-        fwrite(STDERR, 'Cannot read: ' . basename($file) . PHP_EOL);
-        exit(1);
-    }
-    $fileCount++;
-    $lineNumber = 0;
-
-    while (($line = fgets($handle)) !== false) {
-        $lineNumber++;
-        if (preg_match('/(?:^|\s)serial=([^\s]+)/', $line, $matches)
-            && $matches[1] !== '-') {
-            $serial = $matches[1];
-            $counts[$serial] = ($counts[$serial] ?? 0) + 1;
-        } else {
-            $skipped++;
-            $skippedLines[] = basename($file) . ':' . $lineNumber . ': ' . rtrim($line, "\r\n");
-        }
-    }
-
-    if (!feof($handle)) {
-        fclose($handle);
-        fwrite(STDERR, 'Error reading: ' . basename($file) . PHP_EOL);
-        exit(1);
-    }
-    fclose($handle);
-}
-
-if ($fileCount === 0) {
+if ($files === []) {
     fwrite(STDERR, 'Place your log files in the logs/ folder first.' . PHP_EOL);
     exit(1);
 }
 
-uksort($counts, static fn (string $a, string $b): int =>
-    ($counts[$b] <=> $counts[$a]) ?: strcmp($a, $b));
+try {
+    $createdFiles = [];
+    if ($analysis === 'all' || $analysis === 'analyzeAccessAttempts') {
+        $accessReport = analyzeAccessAttempts($files);
+        if (file_put_contents(__DIR__ . '/results/top-licenses.txt', $accessReport) === false) {
+            throw new RuntimeException('Cannot write the results file.');
+        }
+        $createdFiles[] = 'top-licenses.txt';
+    }
 
-$topLicenses = array_slice($counts, 0, 10, true);
-$serialWidth = strlen('License serial number');
-$requestWidth = strlen('Access attempts');
-foreach ($topLicenses as $serial => $count) {
-    $serialWidth = max($serialWidth, strlen((string) $serial));
-    $requestWidth = max($requestWidth, strlen((string) $count));
-}
-
-$rowFormat = '| %8s | %-' . $serialWidth . 's | %' . $requestWidth . 's |' . PHP_EOL;
-$border = '+' . str_repeat('-', 10) . '+' . str_repeat('-', $serialWidth + 2)
-    . '+' . str_repeat('-', $requestWidth + 2) . '+' . PHP_EOL;
-
-$output = 'TOP 10 LICENSES BY SERVER ACCESS ATTEMPTS' . PHP_EOL . PHP_EOL;
-$output .= $border;
-$output .= sprintf($rowFormat, 'Position', 'License serial number', 'Access attempts');
-$output .= $border;
-$position = 1;
-foreach ($topLicenses as $serial => $count) {
-    $output .= sprintf($rowFormat, $position++, $serial, number_format($count, 0, '.', ''));
-}
-$output .= $border;
-if ($topLicenses === []) {
-    $output .= 'No usable license serial numbers found.' . PHP_EOL;
-}
-$output .= PHP_EOL . "Files processed: $fileCount" . PHP_EOL;
-$output .= "Lines without a usable serial: $skipped" . PHP_EOL;
-if ($skippedLines !== []) {
-    $output .= PHP_EOL . 'SKIPPED LINES (file:line: content)' . PHP_EOL;
-    $output .= implode(PHP_EOL, $skippedLines) . PHP_EOL;
-}
-
-$resultDirectory = __DIR__ . '/results';
-if (file_put_contents($resultDirectory . '/top-licenses.txt', $output) === false) {
-    fwrite(STDERR, 'Cannot write the results file.' . PHP_EOL);
+    if ($analysis === 'all' || $analysis === 'analyzeSharedLicenses') {
+        $deviceReport = analyzeSharedLicenses($files);
+        if (file_put_contents(__DIR__ . '/results/top-shared-licenses.txt', $deviceReport) === false) {
+            throw new RuntimeException('Cannot write the device results file.');
+        }
+        $createdFiles[] = 'top-shared-licenses.txt';
+    }
+} catch (RuntimeException $error) {
+    fwrite(STDERR, $error->getMessage() . PHP_EOL);
     exit(1);
 }
 
-echo $output;
-echo PHP_EOL . 'Saved to results/top-licenses.txt' . PHP_EOL;
+echo 'TXT files created in results/: ' . implode(' and ', $createdFiles) . PHP_EOL;
