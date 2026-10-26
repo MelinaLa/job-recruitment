@@ -5,12 +5,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/src/functions.php';
 
 $analysis = $argv[1] ?? 'all';
-$usage = 'Usage: php analyze.php [all|analyzeAccessAttempts|analyzeSharedLicenses]' . PHP_EOL;
+$usage = 'Usage: php analyze.php [all|analyzeAccessAttempts|analyzeSharedLicenses|analyzeHardwareClasses]' . PHP_EOL;
 if ($argc === 2 && in_array($analysis, ['--help', '-h'], true)) {
     echo $usage;
     exit(0);
 }
-if ($argc > 2 || !in_array($analysis, ['all', 'analyzeAccessAttempts', 'analyzeSharedLicenses'], true)) {
+if ($argc > 2 || !in_array($analysis, ['all', 'analyzeAccessAttempts', 'analyzeSharedLicenses', 'analyzeHardwareClasses'], true)) {
     fwrite(STDERR, $usage);
     exit(1);
 }
@@ -54,6 +54,13 @@ try {
             throw new RuntimeException('Cannot write the device results file.');
         }
         $createdFiles[] = 'top-shared-licenses.txt';
+    }
+    if ($analysis === 'all' || $analysis === 'analyzeHardwareClasses') {
+        $hardwareReport = analyzeHardwareClasses($files);
+        if (file_put_contents(__DIR__ . '/results/hardware-classes.txt', $hardwareReport) === false) {
+            throw new RuntimeException('Cannot write the hardware results file.');
+        }
+        $createdFiles[] = 'hardware-classes.txt';
     }
 } catch (RuntimeException $error) {
     fwrite(STDERR, $error->getMessage() . PHP_EOL);

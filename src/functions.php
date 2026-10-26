@@ -77,6 +77,67 @@ function analyzeSharedLicenses(array $files): string
     return $deviceOutput;
 }
 
+function analyzeHardwareClasses(array $files): string
+{
+    $licensesByClass = [];
+    $licenses = [];
+    $withoutSerial = 0;
+
+    foreach (readLogLines($files) as $entry) {
+        $serial = getLicenseSerial($entry['content']);
+        if ($serial === null) {
+            $withoutSerial++;
+            continue;
+        }
+
+        $class = getHardwareClass(getDeviceSpecs($entry['content']));
+        $licensesByClass[$class][$serial] = true;
+        $licenses[$serial] = true;
+    }
+
+    $counts = array_map('count', $licensesByClass);
+    uksort($counts, static fn(string $a, string $b): int =>
+        ($counts[$b] <=> $counts[$a]) ?: strcmp($a, $b));
+
+    $output = formatTable('ACTIVE LICENSES BY HARDWARE CLASS', 'Active licenses', $counts, 'Hardware class');
+    if ($counts === []) {
+        $output .= 'No usable license serial numbers found.' . PHP_EOL;
+    }
+    $output .= PHP_EOL . 'Distinct licenses across all classes: ' . count($licenses) . PHP_EOL;
+    $output .= 'Lines without a usable serial: ' . $withoutSerial . PHP_EOL;
+
+    return $output;
+}
+
+function getHardwareClass(?object $specs): string
+{
+    if (!is_string($specs->cpu ?? null)) {
+        return 'Unknown';
+    }
+
+    $cpu = strtolower($specs->cpu);
+    $cpu = preg_replace('/\((?:r|tm)\)|\bcpu\b|@[^\/]*|[\x00-\x1f\x7f|]/i', ' ', $cpu);
+    $cpu = trim(preg_replace('/\s+/', ' ', $cpu), " /\t\r\n");
+    if ($cpu === '' || in_array($cpu, ['-', 'unknown', 'n/a'], true)) {
+        return 'Unknown';
+    }
+
+    $machine = is_string($specs->machine ?? null) ? strtolower(trim($specs->machine)) : '';
+    if (!preg_match('/^[a-z0-9_+-]+$/', $machine) || $machine === '-') {
+        $machine = 'unknown architecture';
+    }
+
+    $ram = 'unknown RAM';
+    if (is_string($specs->mem ?? null) && preg_match('/^\s*(\d+)\s*kB\s*$/i', $specs->mem, $matches)) {
+        $kilobytes = (float) $matches[1];
+        if ($kilobytes > 0 && is_finite($kilobytes)) {
+            $ram = max(1, round($kilobytes / 1048576)) . ' GiB RAM';
+        }
+    }
+
+    return $cpu . ' / ' . $machine . ' / ' . $ram;
+}
+
 function readLogLines(array $files): Generator
 {
     foreach ($files as $file) {
@@ -108,7 +169,7 @@ function getLicenseSerial(string $line): ?string
     return null;
 }
 
-function getDeviceMac(string $line): ?string
+function getDeviceSpecs(string $line): ?object
 {
     if (!preg_match('/(?:^|\s)specs=(\S+)/', $line, $matches)) {
         return null;
@@ -127,6 +188,13 @@ function getDeviceMac(string $line): ?string
     if (json_last_error() !== JSON_ERROR_NONE || !is_object($specs)) {
         return null;
     }
+
+    return $specs;
+}
+
+function getDeviceMac(string $line): ?string
+{
+    $specs = getDeviceSpecs($line);
     if (!is_string($specs->mac ?? null)) {
         return null;
     }
@@ -142,9 +210,9 @@ function getDeviceMac(string $line): ?string
     return $mac;
 }
 
-function formatTable(string $title, string $countLabel, array $rows): string
+function formatTable(string $title, string $countLabel, array $rows, string $nameLabel = 'License serial number'): string
 {
-    $serialWidth = strlen('License serial number');
+    $serialWidth = strlen($nameLabel);
     $countWidth = strlen($countLabel);
     foreach ($rows as $serial => $count) {
         $serialWidth = max($serialWidth, strlen((string) $serial));
@@ -156,7 +224,7 @@ function formatTable(string $title, string $countLabel, array $rows): string
         . '+' . str_repeat('-', $countWidth + 2) . '+' . PHP_EOL;
 
     $table = $title . PHP_EOL . PHP_EOL . $border;
-    $table .= sprintf($rowFormat, 'Position', 'License serial number', $countLabel) . $border;
+    $table .= sprintf($rowFormat, 'Position', $nameLabel, $countLabel) . $border;
     $position = 1;
     foreach ($rows as $serial => $count) {
         $table .= sprintf($rowFormat, $position++, $serial, $count);
