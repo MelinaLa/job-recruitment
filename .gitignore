@@ -1,0 +1,17 @@
+﻿# Private logs and generated results
+/logs/
+/results/
+*.log
+*.pdf
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
