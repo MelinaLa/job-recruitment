@@ -1,14 +1,14 @@
-# Job Recruitment
+﻿# Job Recruitment
 
-Projekt für den Bereich Personalbeschaffung und Bewerbungen.
+A project for recruitment and job applications.
 
-Das Repository befindet sich im Aufbau. Eine Beschreibung der Funktionen sowie Anweisungen zur Installation und Nutzung werden ergänzt, sobald die Implementierung vorliegt.
+This repository is under development. Feature descriptions and installation and usage instructions will be added once the implementation is available.
 
-## Projektstruktur
+## Project Structure
 
-- `logs/`: vorgesehen für Protokolldateien.
-- `results/`: vorgesehen für Ergebnisse und Auswertungen.
+- `logs/`: intended for log files.
+- `results/`: intended for results and analysis output.
 
-## Entwicklungsstand
+## Development Status
 
-Aktuell enthält das Repository diese README als Ausgangspunkt für die weitere Entwicklung.
+The repository currently contains this README as a starting point for further development.
